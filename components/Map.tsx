@@ -2,19 +2,41 @@ import Mapbox, {
   Camera,
   CircleLayer,
   Images,
+  LineLayer,
   LocationPuck,
   MapView,
   ShapeSource,
   SymbolLayer,
 } from '@rnmapbox/maps';
+import { OnPressEvent } from '@rnmapbox/maps/lib/typescript/src/types/OnPressEvent';
 import { featureCollection, point } from '@turf/helpers';
+import * as Location from 'expo-location';
+import { useState } from 'react';
+
+import { getDirections } from '../services/directions';
+
 import pin from '~/assets/pin.png';
 import scooterData from '~/data/scooters.json';
 
 Mapbox.setAccessToken(process.env.EXPO_PUBLIC_MAPBOX_KEY || '');
 
 const Map = () => {
+  const [direction, setDirection] = useState();
+
   const points = scooterData.map((item) => point([item.long, item.lat]));
+
+  const directionCoordinate = direction?.routes?.[0]?.geometry.coordinates;
+
+  const onPointPress = async (event: OnPressEvent) => {
+    const myLocation = await Location.getCurrentPositionAsync();
+
+    const newDirection = await getDirections(
+      [myLocation.coords.longitude, myLocation.coords.latitude],
+      [event.coordinates.longitude, event.coordinates.latitude]
+    );
+
+    setDirection(newDirection);
+  };
 
   return (
     <MapView style={{ flex: 1 }} styleURL="mapbox://styles/mapbox/satellite-streets-v12">
@@ -25,7 +47,7 @@ const Map = () => {
         cluster
         clusterRadius={30}
         shape={featureCollection(points)}
-        onPress={(e) => console.log(JSON.stringify(e, null, 2))}>
+        onPress={onPointPress}>
         <SymbolLayer
           id="clusters-count"
           filter={['has', 'point_count']}
@@ -40,6 +62,7 @@ const Map = () => {
         <CircleLayer
           id="clusters"
           filter={['has', 'point_count']}
+          belowLayerID="clusters-count"
           style={{
             circlePitchAlignment: 'map',
             circleColor: '#42E100',
@@ -57,6 +80,29 @@ const Map = () => {
         />
         <Images images={{ pin }} />
       </ShapeSource>
+      {directionCoordinate && (
+        <ShapeSource
+          id="routeSource"
+          lineMetrics
+          shape={{
+            properties: {},
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: directionCoordinate,
+            },
+          }}>
+          <LineLayer
+            id="exampleLineLayer"
+            style={{
+              lineColor: '#42E100',
+              lineCap: 'round',
+              lineJoin: 'round',
+              lineWidth: 7,
+            }}
+          />
+        </ShapeSource>
+      )}
     </MapView>
   );
 };
